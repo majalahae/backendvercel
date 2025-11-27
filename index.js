@@ -13,8 +13,11 @@ app.post("/generate", async (req, res) => {
 
     try {
         // Ambil HTML
-        const response = await fetch(url, {
-  headers: {
+        const response = await fetch("https://backendvercel-fawn.vercel.app/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+});
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml"
@@ -63,5 +66,6 @@ fetch("https://backendvercel-fawn.vercel.app/api/generate", {
 })
 .then(res => res.json())
 .then(data => console.log(data));
+
 
 

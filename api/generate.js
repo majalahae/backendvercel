@@ -2,6 +2,15 @@ import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
 
 export default async function handler(req, res) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // Handle preflight CORS
+    if (req.method === "OPTIONS") {
+        return res.status(200).end();
+    }
+
     if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
     }
@@ -10,7 +19,6 @@ export default async function handler(req, res) {
     if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
 
     try {
-        // Ambil HTML berita
         const response = await fetch(url, {
             headers: { "User-Agent": "Mozilla/5.0" }
         });
@@ -23,28 +31,24 @@ export default async function handler(req, res) {
         const dom = new JSDOM(html);
         const document = dom.window.document;
 
-        // Ambil judul (lebih aman dengan fallback)
         const title =
             document.querySelector("h1")?.textContent?.trim() ||
             document.querySelector("meta[property='og:title']")?.content ||
             document.title ||
             "Judul Tidak Ditemukan";
 
-        // Ambil OG Image
         let image_base64 = null;
         const ogImage = document.querySelector('meta[property="og:image"]');
 
         if (ogImage) {
             try {
                 const imgUrl = ogImage.getAttribute("content");
-                const imgResp = await fetch(imgUrl, {
-                    headers: { "User-Agent": "Mozilla/5.0" }
-                });
+                const imgResp = await fetch(imgUrl);
 
                 const buffer = Buffer.from(await imgResp.arrayBuffer());
                 image_base64 = buffer.toString("base64");
-            } catch (e) {
-                console.log("Gagal ambil gambar:", e.message);
+            } catch (err) {
+                console.log("Gagal ambil gambar:", err.message);
             }
         }
 
@@ -54,7 +58,7 @@ export default async function handler(req, res) {
         });
 
     } catch (err) {
-        console.error("SERVER ERROR:", err);
+        console.error("Server error:", err);
         return res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
     }
 }

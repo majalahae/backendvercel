@@ -56,4 +56,12 @@ app.post("/generate", async (req, res) => {
 
 export default app;
 
+fetch("https://backendvercel-fawn.vercel.app/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: newsUrl })
+})
+.then(res => res.json())
+.then(data => console.log(data));
+
 

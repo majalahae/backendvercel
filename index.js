@@ -13,7 +13,13 @@ app.post("/generate", async (req, res) => {
 
     try {
         // Ambil HTML
-        const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+        const response = await fetch(url, {
+  headers: {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml"
+  }
+});
         if (!resp.ok) return res.status(400).json({ error: "Gagal mengambil halaman berita." });
         const html = await resp.text();
 
@@ -49,3 +55,4 @@ app.post("/generate", async (req, res) => {
 });
 
 export default app;
+

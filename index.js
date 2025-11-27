@@ -1,62 +1,51 @@
 import express from "express";
 import cors from "cors";
-import axios from "axios";
-import * as cheerio from "cheerio";
+import fetch from "node-fetch";
+import { JSDOM } from "jsdom";
 
 const app = express();
-app.use(express.json({ limit: "10mb" }));
 app.use(cors());
+app.use(express.json());
 
-// POST /generate
 app.post("/generate", async (req, res) => {
-  const { url } = req.body;
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
 
-  if (!url) {
-    return res.status(400).json({ error: "URL tidak ditemukan." });
-  }
+    try {
+        // Ambil HTML
+        const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+        if (!resp.ok) return res.status(400).json({ error: "Gagal mengambil halaman berita." });
+        const html = await resp.text();
 
-  try {
-    const headers = { "User-Agent": "Mozilla/5.0" };
+        // Parsing HTML
+        const dom = new JSDOM(html);
+        const document = dom.window.document;
 
-    // Ambil HTML berita
-    const resp = await axios.get(url, { headers });
+        // Ambil judul
+        const titleTag = document.querySelector("h1");
+        const title = titleTag ? titleTag.textContent.trim() : "Judul Tidak Ditemukan";
 
-    const $ = cheerio.load(resp.data);
+        // Ambil OG image
+        const ogImage = document.querySelector('meta[property="og:image"]');
+        let image_base64 = null;
 
-    // Ambil judul h1
-    let title = $("h1").first().text().trim();
-    if (!title) title = "Judul Tidak Ditemukan";
+        if (ogImage) {
+            const imageUrl = ogImage.getAttribute("content");
+            try {
+                const imageResp = await fetch(imageUrl);
+                const buffer = Buffer.from(await imageResp.arrayBuffer());
+                image_base64 = buffer.toString("base64");
+            } catch (imgErr) {
+                console.log("Gagal ambil gambar:", imgErr.message);
+            }
+        }
 
-    // Ambil meta og:image
-    const imageUrl = $('meta[property="og:image"]').attr("content");
+        res.json({ title, image_base64 });
 
-    let imageBase64 = null;
-
-    if (imageUrl) {
-      try {
-        const imgResp = await axios.get(imageUrl, {
-          headers,
-          responseType: "arraybuffer"
-        });
-        imageBase64 = Buffer.from(imgResp.data).toString("base64");
-      } catch (err) {
-        console.log("Gagal mengambil gambar:", err);
-      }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
     }
-
-    return res.json({
-      title,
-      image_base64: imageBase64
-    });
-
-  } catch (err) {
-    console.log("Error:", err);
-    return res.status(500).json({
-      error: "Terjadi kesalahan saat generate poster."
-    });
-  }
 });
 
-// Default port untuk Vercel (ignored by Vercel but needed locally)
-app.listen(3000, () => console.log("Server berjalan di port 3000"));
 export default app;

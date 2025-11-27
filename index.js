@@ -48,11 +48,12 @@ app.post("/generate", async (req, res) => {
 
         res.json({ title, image_base64 });
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
-    }
+   } catch (err) {
+  console.error("ERROR BACKEND:", err);
+  return res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
+}
 });
 
 export default app;
+
 

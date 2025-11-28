@@ -1,6 +1,3 @@
-import fetch from "node-fetch";
-import { JSDOM } from "jsdom";
-
 export default async function handler(req, res) {
   // Handle preflight
   if (req.method === "OPTIONS") {
@@ -12,7 +9,10 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // Tambahkan header CORS untuk response POST
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   try {
     const { url } = req.body;
@@ -35,7 +35,9 @@ export default async function handler(req, res) {
         const imageResp = await fetch(ogImage.getAttribute("content"));
         const buffer = Buffer.from(await imageResp.arrayBuffer());
         image_base64 = buffer.toString("base64");
-      } catch {}
+      } catch (e) {
+        console.error("Gagal ambil image:", e);
+      }
     }
 
     res.status(200).json({ title, image_base64 });
@@ -44,7 +46,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
   }
 }
-fetch('https://backendvercel-fawn.vercel.app/api/generate', { method: 'POST' })
-  .then(res => res.json())
-  .then(console.log)
-  .catch(console.error);

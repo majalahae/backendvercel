@@ -44,3 +44,7 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
   }
 }
+fetch('https://backendvercel-fawn.vercel.app/api/generate', { method: 'POST' })
+  .then(res => res.json())
+  .then(console.log)
+  .catch(console.error);

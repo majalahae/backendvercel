@@ -2,11 +2,12 @@ import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
 
 export default async function handler(req, res) {
-  // CORS
+  // Header CORS untuk semua request
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+  // Handle preflight request
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -17,41 +18,49 @@ export default async function handler(req, res) {
 
   try {
     const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ error: "URL tidak ditemukan" });
+    if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
+
+    // Ambil HTML halaman
+    let html;
+    try {
+      const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+      if (!resp.ok) return res.status(400).json({ error: "Gagal mengambil halaman berita." });
+      html = await resp.text();
+    } catch (e) {
+      console.error("Gagal fetch URL:", e);
+      return res.status(500).json({ error: "Gagal fetch halaman." });
     }
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml"
-      }
-    });
+    const document = new JSDOM(html).window.document;
 
-    const html = await response.text();
-    const dom = new JSDOM(html);
-    const titleTag = dom.window.document.querySelector("h1");
+    // Ambil title dengan fallback
+    let title = "Judul Tidak Ditemukan";
+    try {
+      const titleTag = document.querySelector("h1") || document.querySelector("h2") || document.querySelector("title");
+      if (titleTag) title = titleTag.textContent.trim();
+    } catch (e) {
+      console.error("Gagal ambil title:", e);
+    }
 
-    const title = titleTag
-      ? titleTag.textContent.trim()
-      : "Judul Tidak Ditemukan";
-
-    const ogImage = dom.window.document.querySelector(
-      'meta[property="og:image"]'
-    );
+    // Ambil og:image jika ada
     let image_base64 = null;
-
-    if (ogImage) {
-      const imageUrl = ogImage.content;
-      const imgResp = await fetch(imageUrl);
-      const buf = Buffer.from(await imgResp.arrayBuffer());
-      image_base64 = buf.toString("base64");
+    try {
+      const ogImage = document.querySelector('meta[property="og:image"]');
+      if (ogImage) {
+        const imageUrl = ogImage.getAttribute("content");
+        if (imageUrl) {
+          const imageResp = await fetch(imageUrl);
+          const buffer = Buffer.from(await imageResp.arrayBuffer());
+          image_base64 = buffer.toString("base64");
+        }
+      }
+    } catch (e) {
+      console.error("Gagal ambil image:", e);
     }
 
-    return res.json({ title, image_base64 });
+    return res.status(200).json({ title, image_base64 });
   } catch (err) {
-    console.error("SERVER ERROR:", err);
-    return res.status(500).json({ error: "Gagal generate poster" });
+    console.error("Error generate poster:", err);
+    return res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
   }
 }

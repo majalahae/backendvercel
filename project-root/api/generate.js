@@ -1,18 +1,20 @@
+import fetch from "node-fetch";
+import { JSDOM } from "jsdom";
+
 export default async function handler(req, res) {
-  // Handle preflight
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-  // Tambahkan header CORS untuk response POST
+  // Header CORS umum untuk semua response
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Handle preflight request
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
     const { url } = req.body;

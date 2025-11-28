@@ -21,15 +21,13 @@ export default async function handler(req, res) {
     if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
 
     // Ambil HTML halaman
-    let html;
+    let html = "";
     try {
-      const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-      if (!resp.ok) return res.status(400).json({ error: "Gagal mengambil halaman berita." });
-      html = await resp.text();
-    } catch (e) {
-      console.error("Gagal fetch URL:", e);
-      return res.status(500).json({ error: "Gagal fetch halaman." });
-    }
+    const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    html = resp.ok ? await resp.text() : "";
+    } catch(e) {
+    console.error("Gagal fetch halaman:", e);
+  }
 
     const document = new JSDOM(html).window.document;
 

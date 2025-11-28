@@ -1,31 +1,55 @@
+import puppeteer from "puppeteer";
+
 export default async function handler(req, res) {
-  // CORS Wajib
-  res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");
-  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Jika OPTIONS → balas langsung
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  const { url } = req.body;
 
   try {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL kosong" });
-
-    // === SCRAPER DI SINI (Puppeteer version) ===
-    // misal return data dummy dulu
-    return res.status(200).json({
-      title: "Berhasil",
-      image_base64: null,
-      summary: "Test sukses dari backend"
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-userns-sandbox"]
     });
 
-  } catch (err) {
-    return res.status(500).json({ error: "Server error", detail: err.message });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: "networkidle2" });
+
+    // === SCRAPE JUDUL ===
+    const title = await page.$eval("h1.single-title", el => el.innerText.trim());
+
+    // === SCRAPE GAMBAR ===
+    const imageUrl = await page.$eval("div.single-img img", img => img.src);
+
+    // Download & convert to base64
+    const imageResponse = await page.goto(imageUrl);
+    const buf = await imageResponse.buffer();
+    const image_base64 = `data:image/jpeg;base64,${buf.toString("base64")}`;
+
+    // === SCRAPE MAKS 4 PARAGRAF ===
+    const paragraphs = await page.$$eval(
+      "div.single-body-text p",
+      els => els.slice(0, 4).map(e => e.innerText.trim())
+    );
+
+    const summary = paragraphs.join("\n\n");
+
+    await browser.close();
+
+    return res.status(200).json({
+      title,
+      image_base64,
+      summary
+    });
+
+  } catch (e) {
+    return res.status(500).json({
+      error: e.message
+    });
   }
 }

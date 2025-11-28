@@ -2,61 +2,56 @@ import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
 
 export default async function handler(req, res) {
-  // Header CORS untuk semua request
+  // Header CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight request
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(200).json({ title: "Tidak ditemukan", image_base64: null });
-
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     const { url } = req.body;
-    if (!url) return res.status(200).json({ title: "Tidak ditemukan", image_base64: null });
+    if (!url || !url.startsWith("http")) return res.status(400).json({ error: "URL tidak valid, harus diawali http/https." });
 
-    // Ambil HTML halaman
+    // Ambil HTML
     let html = "";
     try {
-    const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-    html = resp.ok ? await resp.text() : "";
+      const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+      html = resp.ok ? await resp.text() : "";
     } catch(e) {
-    console.error("Gagal fetch halaman:", e);
-  }
+      console.error("Gagal fetch halaman:", e);
+    }
+
+    console.log("URL request:", url);
+    console.log("Partial HTML:", html.slice(0, 500));
 
     const document = new JSDOM(html).window.document;
 
-    // Ambil title dengan fallback
+    // Ambil title
     let title = "Judul Tidak Ditemukan";
     try {
       const titleTag = document.querySelector("h1") || document.querySelector("h2") || document.querySelector("title");
-      const title = titleTag ? titleTag.textContent.trim() : "Judul Tidak Ditemukan";
       if (titleTag) title = titleTag.textContent.trim();
     } catch (e) {
       console.error("Gagal ambil title:", e);
     }
 
-    // Ambil og:image jika ada
-let image_base64 = null;
-try {
-  const ogImage = document.querySelector('meta[property="og:image"]');
-  if (ogImage) {
-    const imageUrl = ogImage.getAttribute("content");
-    if (imageUrl) {
-      const imageResp = await fetch(imageUrl);
-      const buffer = Buffer.from(await imageResp.arrayBuffer());
-      image_base64 = buffer.toString("base64");
+    // Ambil og:image
+    let image_base64 = null;
+    try {
+      const ogImage = document.querySelector('meta[property="og:image"]');
+      if (ogImage) {
+        const imageUrl = ogImage.getAttribute("content");
+        if (imageUrl) {
+          const imageResp = await fetch(imageUrl);
+          const buffer = Buffer.from(await imageResp.arrayBuffer());
+          image_base64 = buffer.toString("base64");
+        }
+      }
+    } catch (e) {
+      console.error("Gagal ambil image:", e);
     }
-  }
-} catch (e) {
-  console.error("Gagal ambil image:", e);
-}
 
     return res.status(200).json({ title, image_base64 });
   } catch (err) {
@@ -64,5 +59,3 @@ try {
     return res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
   }
 }
-console.log("URL request:", url);
-console.log("Partial HTML:", html.slice(0, 500));

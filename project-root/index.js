@@ -1,4 +1,4 @@
-import express from "express";
+import express from "express"; 
 import cors from "cors";
 import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
@@ -12,18 +12,18 @@ app.post("/generate", async (req, res) => {
     if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
 
     try {
-        // Ambil HTML
-        const response = await fetch("https://backendvercel-fawn.vercel.app/api/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url })
-});
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml"
-  }
-});
-        if (!resp.ok) return res.status(400).json({ error: "Gagal mengambil halaman berita." });
+        // Ambil halaman berita langsung
+        const resp = await fetch(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "Accept": "text/html,application/xhtml+xml"
+            }
+        });
+
+        if (!resp.ok) {
+            return res.status(400).json({ error: "Gagal mengambil halaman berita." });
+        }
+
         const html = await resp.text();
 
         // Parsing HTML
@@ -49,22 +49,12 @@ app.post("/generate", async (req, res) => {
             }
         }
 
-        res.json({ title, image_base64 });
+        return res.json({ title, image_base64 });
 
    } catch (err) {
-  console.error("ERROR BACKEND:", err);
-  return res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
-}
+        console.error("ERROR BACKEND:", err);
+        return res.status(500).json({ error: "Terjadi kesalahan saat generate poster." });
+   }
 });
 
 export default app;
-
-fetch("https://backendvercel-fawn.vercel.app/api/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: newsUrl })
-})
-.then(res => res.json())
-.then(data => console.log(data));
-
-

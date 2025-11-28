@@ -1,66 +1,93 @@
-import fetch from "node-fetch";
-import { JSDOM } from "jsdom";
+import axios from "axios";
+import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
-  // Header CORS untuk semua request
+  // =============== CORS FIX (PENTING) ===============
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight request
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  // ==================================================
 
   try {
     const { url } = req.body;
-    if (!url || !url.startsWith("http")) {
-      return res.status(200).json({ title: "Tidak ditemukan", image_base64: null });
+
+    if (!url) {
+      return res.status(400).json({ error: "URL tidak diberikan." });
     }
 
-    // Ambil HTML halaman target
-    let html = "";
-    try {
-      const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-      html = resp.ok ? await resp.text() : "";
-    } catch (e) {
-      console.error("Gagal fetch halaman:", e);
-    }
+    // Fetch halaman
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      },
+    });
 
-    // Debug: cek URL dan partial HTML
-    console.log("URL request:", url);
-    console.log("Partial HTML:", html.slice(0, 500));
+    const $ = cheerio.load(response.data);
 
-    const document = new JSDOM(html).window.document;
+    // ========================
+    // 1. JUDUL
+    // ========================
+    const title =
+      $("h1.single-title").text().trim() ||
+      $("meta[property='og:title']").attr("content") ||
+      "Judul tidak ditemukan";
 
-    // Ambil judul dengan fallback
-    let title = "Judul Tidak Ditemukan";
-    try {
-      const titleTag = document.querySelector("h1") || document.querySelector("h2") || document.querySelector("title");
-      if (titleTag) title = titleTag.textContent.trim();
-    } catch (e) {
-      console.error("Gagal ambil title:", e);
-    }
+    // ========================
+    // 2. GAMBAR UTAMA
+    // ========================
+    let image =
+      $(".single-img img").attr("src") ||
+      $("meta[property='og:image']").attr("content") ||
+      null;
 
-    // Ambil og:image jika ada
-    let image_base64 = null;
-    try {
-      const ogImage = document.querySelector('meta[property="og:image"]');
-      if (ogImage) {
-        const imageUrl = ogImage.getAttribute("content");
-        if (imageUrl) {
-          const imageResp = await fetch(imageUrl);
-          const buffer = Buffer.from(await imageResp.arrayBuffer());
-          image_base64 = buffer.toString("base64");
-        }
-      }
-    } catch (e) {
-      console.error("Gagal ambil image:", e);
-    }
+    if (image && image.startsWith("//")) image = "https:" + image;
 
-    // Return JSON
-    return res.status(200).json({ title, image_base64 });
+    // ========================
+    // 3. CAPTION
+    // ========================
+    const caption =
+      $(".single-img figcaption").text().trim() ||
+      $(".single-img .caption").text().trim() ||
+      null;
+
+    // ========================
+    // 4. EMPAT PARAGRAF
+    // ========================
+    const paragraphs = $(".single-body-text p")
+      .toArray()
+      .slice(0, 4)
+      .map((el) => $(el).text().trim())
+      .filter((t) => t !== "");
+
+    // ========================
+    // 5. META TAMBAHAN
+    // ========================
+    const category =
+      $(".breadcrumb li a").last().text().trim() ||
+      null;
+
+    const date =
+      $(".single-date").text().trim() ||
+      null;
+
+    return res.status(200).json({
+      success: true,
+      title,
+      image,
+      caption,
+      category,
+      date,
+      paragraphs,
+    });
   } catch (err) {
-    console.error("Error generate poster:", err);
-    return res.status(200).json({ title: "Tidak ditemukan", image_base64: null });
+    return res.status(500).json({
+      success: false,
+      error: "Gagal mengambil halaman berita.",
+      detail: err.message,
+    });
   }
 }

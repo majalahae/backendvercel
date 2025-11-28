@@ -36,26 +36,27 @@ export default async function handler(req, res) {
     let title = "Judul Tidak Ditemukan";
     try {
       const titleTag = document.querySelector("h1") || document.querySelector("h2") || document.querySelector("title");
+      const title = titleTag ? titleTag.textContent.trim() : "Judul Tidak Ditemukan";
       if (titleTag) title = titleTag.textContent.trim();
     } catch (e) {
       console.error("Gagal ambil title:", e);
     }
 
     // Ambil og:image jika ada
-    let image_base64 = null;
-    try {
-      const ogImage = document.querySelector('meta[property="og:image"]');
-      if (ogImage) {
-        const imageUrl = ogImage.getAttribute("content");
-        if (imageUrl) {
-          const imageResp = await fetch(imageUrl);
-          const buffer = Buffer.from(await imageResp.arrayBuffer());
-          image_base64 = buffer.toString("base64");
-        }
-      }
-    } catch (e) {
-      console.error("Gagal ambil image:", e);
+let image_base64 = null;
+try {
+  const ogImage = document.querySelector('meta[property="og:image"]');
+  if (ogImage) {
+    const imageUrl = ogImage.getAttribute("content");
+    if (imageUrl) {
+      const imageResp = await fetch(imageUrl);
+      const buffer = Buffer.from(await imageResp.arrayBuffer());
+      image_base64 = buffer.toString("base64");
     }
+  }
+} catch (e) {
+  console.error("Gagal ambil image:", e);
+}
 
     return res.status(200).json({ title, image_base64 });
   } catch (err) {

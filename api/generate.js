@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
     const ogImage = document.querySelector('meta[property="og:image"]');
     let image_base64 = null;
-
+ 
     if (ogImage) {
       const imageResp = await fetch(ogImage.getAttribute("content"));
       const buffer = Buffer.from(await imageResp.arrayBuffer());

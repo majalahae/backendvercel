@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  res.setHeader("Access-Control-Allow-Origin", "*"); // penting untuk POST
+  res.setHeader("Access-Control-Allow-Origin", "*");
 
   try {
     const { url } = req.body;
@@ -29,11 +29,13 @@ export default async function handler(req, res) {
 
     const ogImage = document.querySelector('meta[property="og:image"]');
     let image_base64 = null;
- 
+
     if (ogImage) {
-      const imageResp = await fetch(ogImage.getAttribute("content"));
-      const buffer = Buffer.from(await imageResp.arrayBuffer());
-      image_base64 = buffer.toString("base64");
+      try {
+        const imageResp = await fetch(ogImage.getAttribute("content"));
+        const buffer = Buffer.from(await imageResp.arrayBuffer());
+        image_base64 = buffer.toString("base64");
+      } catch {}
     }
 
     res.status(200).json({ title, image_base64 });

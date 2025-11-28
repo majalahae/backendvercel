@@ -2,7 +2,7 @@ import fetch from "node-fetch";
 import { JSDOM } from "jsdom";
 
 export default async function handler(req, res) {
-  // Preflight
+  // Handle preflight
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -12,12 +12,12 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
+  res.setHeader("Access-Control-Allow-Origin", "*"); // penting untuk POST
 
   try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL tidak ditemukan." });
+
     const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!resp.ok) return res.status(400).json({ error: "Gagal mengambil halaman berita." });
 

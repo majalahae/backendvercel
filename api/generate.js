@@ -14,40 +14,74 @@ export default async function handler(req, res) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL kosong" });
 
-    // Fetch HTML berita
-    const page = await fetch(url);
-    const html = await page.text();
+    // Fetch HTML dengan user-agent
+    const page = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+      redirect: "follow",
+    });
 
+    const html = await page.text();
     const $ = cheerio.load(html);
 
-    // Ambil title
     const title =
       $('meta[property="og:title"]').attr("content") ||
       $("title").text() ||
       "Tanpa Judul";
 
-    // Ambil summary
     const summary =
       $('meta[property="og:description"]').attr("content") ||
       $("p").first().text().slice(0, 150) ||
       "Tidak ada ringkasan.";
 
-    // Ambil gambar utama
+    // 1. Coba og:image
     let imageUrl = $('meta[property="og:image"]').attr("content");
 
+    // 2. Jika og:image tidak ada → ambil <img> terbesar
+    if (!imageUrl) {
+      let maxArea = 0;
+      $("img").each((i, el) => {
+        const src = $(el).attr("src");
+        const w = parseInt($(el).attr("width")) || 0;
+        const h = parseInt($(el).attr("height")) || 0;
+        const area = w * h;
+
+        if (src && area > maxArea) {
+          maxArea = area;
+          imageUrl = src;
+        }
+      });
+    }
+
+    // Normalize URL relatifs
+    if (imageUrl && imageUrl.startsWith("//")) {
+      imageUrl = `https:${imageUrl}`;
+    } else if (imageUrl && imageUrl.startsWith("/")) {
+      const base = new URL(url).origin;
+      imageUrl = base + imageUrl;
+    }
+
+    // Jika tetap null → frontend tetap bisa jalan (pakai fallback)
     if (!imageUrl) {
       return res.status(200).json({
         title,
         summary,
         image_base64: null,
-        warning: "Berita ini tidak memiliki og:image",
+        warning: "Tidak ditemukan gambar apapun di halaman.",
       });
     }
 
-    // Fetch gambar → convert ke base64
-    const imgResp = await fetch(imageUrl);
-    const imgBuffer = await imgResp.arrayBuffer();
+    // Fetch gambar
+    const imgResp = await fetch(imageUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+    });
 
+    const imgBuffer = await imgResp.arrayBuffer();
     const imageBase64 =
       "data:image/jpeg;base64," +
       Buffer.from(imgBuffer).toString("base64");

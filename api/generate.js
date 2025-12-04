@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL kosong" });
 
-    // Fetch HTML dengan user-agent
+    // Fetch HTML
     const page = await fetch(url, {
       headers: {
         "User-Agent":
@@ -26,20 +26,35 @@ export default async function handler(req, res) {
     const html = await page.text();
     const $ = cheerio.load(html);
 
+    // --- TITLE ---
     const title =
       $('meta[property="og:title"]').attr("content") ||
       $("title").text() ||
       "Tanpa Judul";
 
-    const summary =
+    // --- SUMMARY fallback lama ---
+    const fallbackSummary =
       $('meta[property="og:description"]').attr("content") ||
       $("p").first().text().slice(0, 150) ||
       "Tidak ada ringkasan.";
 
-    // 1. Coba og:image
+    // ======================================================
+    // 🔥 CAPTION BARU (2 PARAGRAF PERTAMA)
+    // ======================================================
+    const paragraphs = [];
+    $("p").each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 40) paragraphs.push(text); // skip paragraf pendek/iklan
+    });
+
+    const caption =
+      paragraphs.slice(0, 2).join("\n\n") || fallbackSummary;
+
+    // ======================================================
+
+    // --- IMAGE ---
     let imageUrl = $('meta[property="og:image"]').attr("content");
 
-    // 2. Jika og:image tidak ada → ambil <img> terbesar
     if (!imageUrl) {
       let maxArea = 0;
       $("img").each((i, el) => {
@@ -55,7 +70,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Normalize URL relatifs
     if (imageUrl && imageUrl.startsWith("//")) {
       imageUrl = `https:${imageUrl}`;
     } else if (imageUrl && imageUrl.startsWith("/")) {
@@ -63,11 +77,10 @@ export default async function handler(req, res) {
       imageUrl = base + imageUrl;
     }
 
-    // Jika tetap null → frontend tetap bisa jalan (pakai fallback)
     if (!imageUrl) {
       return res.status(200).json({
         title,
-        summary,
+        summary: caption, // <── ini caption 2 paragraf
         image_base64: null,
         warning: "Tidak ditemukan gambar apapun di halaman.",
       });
@@ -88,9 +101,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       title,
-      summary,
+      summary: caption, // <── frontend ambil ini
       image_base64: imageBase64,
     });
+
   } catch (err) {
     return res.status(500).json({ error: err.toString() });
   }

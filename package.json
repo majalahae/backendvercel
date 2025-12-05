@@ -1,12 +1,14 @@
 {
-  "name": "backendvercel",
+  "name": "rrinfg-backend",
   "version": "1.0.0",
-  "type": "module",
+  "description": "API scraping rri.co.id untuk rrinfg.xyz",
+  "main": "api/generate.js",
+  "scripts": {
+    "start": "vercel dev"
+  },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",
     "node-fetch": "^3.3.2"
   },
-  "engines": {
-    "node": ">=18"
-  }
+  "type": "module"
 }

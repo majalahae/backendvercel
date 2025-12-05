@@ -1,76 +1,58 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
+const axios = require("axios");
+const cheerio = require("cheerio");
 
-export default async function handler(req, res) {
-  // ======== FIX CORS ========
+module.exports = async (req, res) => {
+  // CORS FIX
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
-  // ==========================
 
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
-
     const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ error: "URL tidak diberikan" });
-    }
+    if (!url) return res.status(400).json({ error: "URL tidak diberikan" });
 
-    const response = await axios.get(url, {
+    const result = await axios.get(url, {
       headers: { "User-Agent": "Mozilla/5.0" }
     });
 
-    const $ = cheerio.load(response.data);
+    const $ = cheerio.load(result.data);
 
     const title =
-      $("h1").text().trim() ||
+      $("h1").first().text().trim() ||
       $('meta[property="og:title"]').attr("content") ||
       "Judul tidak ditemukan";
 
     const summary =
-      $(".single-body-text").text().replace(/\s+/g, " ").trim() ||
+      $(".single-body-text").text().trim().replace(/\s+/g, " ") ||
       $('meta[name="description"]').attr("content") ||
       "Summary tidak ditemukan.";
 
-    let image =
+    let imageUrl =
       $('meta[property="og:image"]').attr("content") ||
       $("img").first().attr("src");
 
-    if (image && !image.startsWith("http")) {
-      const base = new URL(url).origin;
-      image = base + image;
+    if (imageUrl && !imageUrl.startsWith("http")) {
+      const origin = new URL(url).origin;
+      imageUrl = origin + imageUrl;
     }
 
     let image_base64 = null;
 
-    if (image) {
-      try {
-        const imgResp = await axios.get(image, { responseType: "arraybuffer" });
-        const mime = imgResp.headers["content-type"] || "image/jpeg";
-        const b64 = Buffer.from(imgResp.data).toString("base64");
-        image_base64 = `data:${mime};base64,${b64}`;
-      } catch (e) {
-        image_base64 = null;
-      }
+    if (imageUrl) {
+      const img = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const mime = img.headers["content-type"] || "image/jpeg";
+      image_base64 = `data:${mime};base64,${Buffer.from(img.data).toString(
+        "base64"
+      )}`;
     }
 
-    return res.status(200).json({
-      title,
-      summary,
-      image_base64,
-    });
-
+    return res.status(200).json({ title, summary, image_base64 });
   } catch (err) {
-    console.error("Backend error:", err);
-    return res.status(500).json({
-      error: "Server error",
-      message: err.message,
-    });
+    console.error("Backend Error:", err);
+    return res.status(500).json({ error: "Server error", detail: err.message });
   }
-}
+};

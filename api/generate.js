@@ -1,111 +1,78 @@
-import fetch from "node-fetch";
+import axios from "axios";
 import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method Not Allowed" });
-
   try {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
     const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL kosong" });
+    if (!url) {
+      return res.status(400).json({ error: "URL tidak diberikan" });
+    }
 
-    // Fetch HTML
-    const page = await fetch(url, {
+    // ======== AMBIL HTML ========
+    const response = await axios.get(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        "User-Agent": "Mozilla/5.0",
+        Accept: "text/html",
       },
-      redirect: "follow",
     });
 
-    const html = await page.text();
-    const $ = cheerio.load(html);
+    const $ = cheerio.load(response.data);
 
-    // --- TITLE ---
+    // ======== AMBIL JUDUL ========
     const title =
+      $("h1").text().trim() ||
       $('meta[property="og:title"]').attr("content") ||
-      $("title").text() ||
-      "Tanpa Judul";
+      "Judul tidak ditemukan";
 
-    // --- SUMMARY fallback lama ---
-    const fallbackSummary =
-      $('meta[property="og:description"]').attr("content") ||
-      $("p").first().text().slice(0, 150) ||
-      "Tidak ada ringkasan.";
+    // ======== AMBIL SUMMARY / CAPTION ========
+    const summary =
+      $(".single-body-text")
+        .text()
+        .replace(/\s+/g, " ")
+        .trim() ||
+      $('meta[name="description"]').attr("content") ||
+      "Summary tidak ditemukan.";
 
-    // ======================================================
-    // 🔥 CAPTION BARU (2 PARAGRAF PERTAMA)
-    // ======================================================
-    const paragraphs = [];
-    $("p").each((i, el) => {
-      const text = $(el).text().trim();
-      if (text.length > 40) paragraphs.push(text); // skip paragraf pendek/iklan
-    });
+    // ======== AMBIL GAMBAR ========
+    let image =
+      $('meta[property="og:image"]').attr("content") ||
+      $("img").first().attr("src");
 
-    const caption =
-      paragraphs.slice(0, 2).join("\n\n") || fallbackSummary;
-
-    // ======================================================
-
-    // --- IMAGE ---
-    let imageUrl = $('meta[property="og:image"]').attr("content");
-
-    if (!imageUrl) {
-      let maxArea = 0;
-      $("img").each((i, el) => {
-        const src = $(el).attr("src");
-        const w = parseInt($(el).attr("width")) || 0;
-        const h = parseInt($(el).attr("height")) || 0;
-        const area = w * h;
-
-        if (src && area > maxArea) {
-          maxArea = area;
-          imageUrl = src;
-        }
-      });
-    }
-
-    if (imageUrl && imageUrl.startsWith("//")) {
-      imageUrl = `https:${imageUrl}`;
-    } else if (imageUrl && imageUrl.startsWith("/")) {
+    if (image && !image.startsWith("http")) {
       const base = new URL(url).origin;
-      imageUrl = base + imageUrl;
+      image = base + image;
     }
 
-    if (!imageUrl) {
-      return res.status(200).json({
-        title,
-        summary: caption, // <── ini caption 2 paragraf
-        image_base64: null,
-        warning: "Tidak ditemukan gambar apapun di halaman.",
-      });
+    let image_base64 = null;
+
+    if (image) {
+      try {
+        const imgResp = await axios.get(image, {
+          responseType: "arraybuffer",
+        });
+
+        const mime = imgResp.headers["content-type"] || "image/jpeg";
+        const b64 = Buffer.from(imgResp.data).toString("base64");
+        image_base64 = `data:${mime};base64,${b64}`;
+      } catch (e) {
+        image_base64 = null;
+      }
     }
-
-    // Fetch gambar
-    const imgResp = await fetch(imageUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-      },
-    });
-
-    const imgBuffer = await imgResp.arrayBuffer();
-    const imageBase64 =
-      "data:image/jpeg;base64," +
-      Buffer.from(imgBuffer).toString("base64");
 
     return res.status(200).json({
       title,
-      summary: caption, // <── frontend ambil ini
-      image_base64: imageBase64,
+      summary,
+      image_base64,
     });
-
   } catch (err) {
-    return res.status(500).json({ error: err.toString() });
+    console.error("Backend error:", err);
+    return res.status(500).json({
+      error: "Server error",
+      message: err.message,
+    });
   }
 }

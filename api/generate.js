@@ -1,12 +1,7 @@
-import cheerio from "cheerio";
-
-const cheerio = require("cheerio");
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-
-module.exports = async (req, res) => { ... }
+import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
-  // CORS agar rrinfg.xyz bisa akses API
   res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -19,81 +14,94 @@ export default async function handler(req, res) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL kosong" });
 
-    // -------- FETCH HTML --------
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 Chrome/120" },
+    // Fetch HTML
+    const page = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+      redirect: "follow",
     });
 
-    const html = await response.text();
+    const html = await page.text();
     const $ = cheerio.load(html);
 
-    // -------- TITLE --------
+    // --- TITLE ---
     const title =
       $('meta[property="og:title"]').attr("content") ||
-      $("h1.entry-title").text().trim() ||
-      $("title").text().trim() ||
+      $("title").text() ||
       "Tanpa Judul";
 
-    // -------- CAPTION --------
-    let paragraphs = [];
-
-    $("div.single-body-text p").each((i, el) => {
-      const tx = $(el).text().trim();
-      if (tx.length > 40) paragraphs.push(tx);
-    });
-
-    // fallback
-    if (paragraphs.length === 0) {
-      $("p").each((i, el) => {
-        const tx = $(el).text().trim();
-        if (tx.length > 40) paragraphs.push(tx);
-      });
-    }
-
-    const caption =
-      paragraphs.slice(0, 2).join("\n\n") ||
+    // --- SUMMARY fallback lama ---
+    const fallbackSummary =
       $('meta[property="og:description"]').attr("content") ||
+      $("p").first().text().slice(0, 150) ||
       "Tidak ada ringkasan.";
 
-    // -------- IMAGE / OG IMAGE --------
+    // ======================================================
+    // 🔥 CAPTION BARU (2 PARAGRAF PERTAMA)
+    // ======================================================
+    const paragraphs = [];
+    $("p").each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 40) paragraphs.push(text); // skip paragraf pendek/iklan
+    });
+
+    const caption =
+      paragraphs.slice(0, 2).join("\n\n") || fallbackSummary;
+
+    // ======================================================
+
+    // --- IMAGE ---
     let imageUrl = $('meta[property="og:image"]').attr("content");
 
     if (!imageUrl) {
-      const img = $("div.single-body-text img").attr("src");
-      if (img) imageUrl = img;
+      let maxArea = 0;
+      $("img").each((i, el) => {
+        const src = $(el).attr("src");
+        const w = parseInt($(el).attr("width")) || 0;
+        const h = parseInt($(el).attr("height")) || 0;
+        const area = w * h;
+
+        if (src && area > maxArea) {
+          maxArea = area;
+          imageUrl = src;
+        }
+      });
     }
 
-    // normalisasi URL
-    if (imageUrl?.startsWith("//")) {
-      imageUrl = "https:" + imageUrl;
-    } else if (imageUrl?.startsWith("/")) {
+    if (imageUrl && imageUrl.startsWith("//")) {
+      imageUrl = `https:${imageUrl}`;
+    } else if (imageUrl && imageUrl.startsWith("/")) {
       const base = new URL(url).origin;
       imageUrl = base + imageUrl;
     }
 
-    // jika tidak ada gambar
     if (!imageUrl) {
       return res.status(200).json({
         title,
-        summary: caption,
+        summary: caption, // <── ini caption 2 paragraf
         image_base64: null,
-        warning: "Tidak ada gambar.",
+        warning: "Tidak ditemukan gambar apapun di halaman.",
       });
     }
 
-    // -------- FETCH IMAGE BASE64 --------
+    // Fetch gambar
     const imgResp = await fetch(imageUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 Chrome/120" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
     });
 
-    const buffer = await imgResp.arrayBuffer();
+    const imgBuffer = await imgResp.arrayBuffer();
     const imageBase64 =
-      "data:image/jpeg;base64," + Buffer.from(buffer).toString("base64");
+      "data:image/jpeg;base64," +
+      Buffer.from(imgBuffer).toString("base64");
 
-    // -------- RETURN KE FRONTEND --------
     return res.status(200).json({
       title,
-      summary: caption,
+      summary: caption, // <── frontend ambil ini
       image_base64: imageBase64,
     });
 

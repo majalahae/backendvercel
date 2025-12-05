@@ -1,44 +1,72 @@
-import fetch from "node-fetch";
-import * as cheerio from "cheerio";
+const axios = require("axios");
+const cheerio = require("cheerio");
 
-export default async function handler(req,res){
-  res.setHeader("Access-Control-Allow-Origin","https://rrinfg.xyz");
-  res.setHeader("Access-Control-Allow-Methods","GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers","Content-Type,Authorization");
-  if(req.method==="OPTIONS") return res.status(200).end();
-  if(req.method!=="POST") return res.status(405).json({error:"Method Not Allowed"});
-  
-  try{
-    const {url} = req.body;
-    if(!url) return res.status(400).json({error:"URL kosong"});
-    const page=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0"},redirect:"follow"});
-    const html=await page.text();
-    const $=cheerio.load(html);
+// Fungsi delay
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    const title=$('meta[property="og:title"]').attr("content")||$("h1").first().text()||"Tanpa Judul";
+module.exports = async (req, res) => {
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-    const paragraphs=[];
-    $("p").each((i,el)=>{
-      const t=$(el).text().trim();
-      if(t.length>40 && !t.includes("Baca Juga:")) paragraphs.push(t);
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL tidak diberikan" });
+
+    // Delay acak 1-2 detik sebelum scraping
+    await delay(1000 + Math.random() * 1000);
+
+    // Ambil HTML
+    const html = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
-    const caption=paragraphs.slice(0,2).join("\n\n") || $('meta[property="og:description"]').attr("content") || "Tidak ada ringkasan.";
 
-    let imageUrl=$('meta[property="og:image"]').attr("content")||$("img").first().attr("src");
-    if(imageUrl && imageUrl.startsWith("//")) imageUrl="https:"+imageUrl;
-    else if(imageUrl && imageUrl.startsWith("/")) imageUrl=new URL(url).origin+imageUrl;
+    const $ = cheerio.load(html.data);
 
-    let image_base64=null;
-    if(imageUrl){
-      try{
-        const imgResp=await fetch(imageUrl,{headers:{"User-Agent":"Mozilla/5.0"}});
-        if(imgResp.ok){
-          const buffer=await imgResp.arrayBuffer();
-          image_base64="data:image/jpeg;base64,"+Buffer.from(buffer).toString("base64");
-        }
-      }catch(e){ console.error("Error fetch image:",e.message);}
+    // Ambil TITLE
+    const title =
+      $("h1").first().text().trim() ||
+      $('meta[property="og:title"]').attr("content") ||
+      "Judul tidak ditemukan";
+
+    // Ambil SUMMARY
+    const summary =
+      $(".single-body-text").text().trim().replace(/\s+/g, " ") ||
+      $('meta[name="description"]').attr("content") ||
+      "Summary tidak ditemukan";
+
+    // Ambil IMAGE
+    let imageUrl =
+      $('meta[property="og:image"]').attr("content") ||
+      $("img").first().attr("src");
+
+    if (imageUrl && !imageUrl.startsWith("http")) {
+      const origin = new URL(url).origin;
+      imageUrl = origin + imageUrl;
     }
 
-    res.status(200).json({title,summary:caption,image_base64});
-  }catch(e){ console.error("Error scraping:",e); res.status(500).json({error:e.toString()});}
-}
+    let image_base64 = null;
+
+    if (imageUrl) {
+      try {
+        const img = await axios.get(imageUrl, { responseType: "arraybuffer" });
+        const mime = img.headers["content-type"];
+        const base64 = Buffer.from(img.data, "binary").toString("base64");
+        image_base64 = `data:${mime};base64,${base64}`;
+      } catch (err) {
+        console.error("Gagal ambil gambar:", err.message);
+      }
+    }
+
+    res.status(200).json({ title, summary, image_base64 });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};

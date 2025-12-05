@@ -1,5 +1,10 @@
 import cheerio from "cheerio";
 
+const cheerio = require("cheerio");
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
+module.exports = async (req, res) => { ... }
+
 export default async function handler(req, res) {
   // CORS agar rrinfg.xyz bisa akses API
   res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");

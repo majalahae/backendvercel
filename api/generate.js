@@ -3,19 +3,24 @@ import * as cheerio from "cheerio";
 
 const bufferToBase64 = (buffer) => Buffer.from(buffer).toString("base64");
 
-// Domain frontend yang diizinkan
-const ALLOWED_ORIGIN = "https://rrinfg.xyz";
+// Daftar origin yang diizinkan
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",  // untuk testing lokal
+  "https://rrinfg.xyz"      // domain live
+];
 
 export default async function handler(req, res) {
-  // --- SET CORS HEADER UNTUK SEMUA METHOD ---
-  res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
+  const origin = req.headers.origin;
+
+  // --- SET CORS HEADER DINAMIS ---
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   // --- TANGANI PRE-FLIGHT OPTIONS ---
-  if (req.method === "OPTIONS") {
-    return res.status(204).end(); // 204 No Content
-  }
+  if (req.method === "OPTIONS") return res.status(204).end();
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -25,11 +30,9 @@ export default async function handler(req, res) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL kosong" });
 
-    // Fetch halaman berita
+    // --- Fetch halaman berita ---
     const newsResponse = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 Chrome/120"
-      },
+      headers: { "User-Agent": "Mozilla/5.0 Chrome/120" },
     });
 
     if (!newsResponse.ok) return res.status(newsResponse.status).json({ error: `Gagal fetch URL: Status ${newsResponse.status}` });

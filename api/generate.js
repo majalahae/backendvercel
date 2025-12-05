@@ -1,13 +1,19 @@
-const axios = require("axios");
-const cheerio = require("cheerio");
+// === IMPORT ===
+import axios from "axios";
+import * as cheerio from "cheerio";
 
-module.exports = async (req, res) => {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// === HANDLER ===
+export default async function handler(req, res) {
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  // --- CORS ALWAYS ---
+  res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  // --- Preflight ---
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
   try {
     const { url } = req.body;
@@ -44,6 +50,19 @@ module.exports = async (req, res) => {
     let image_base64 = null;
 
     if (imageUrl) {
-      try {
-        const img = await axios.get(imageUrl, { responseType: "arraybuffer" });
-        const mime =
+      const img = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const mime = img.headers["content-type"] || "image/jpeg";
+      image_base64 = `data:${mime};base64,${Buffer.from(img.data).toString("base64")}`;
+    }
+
+    res.status(200).json({
+      title,
+      summary,
+      image_base64,
+    });
+
+  } catch (err) {
+    console.error("ERR BACKEND:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}

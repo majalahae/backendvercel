@@ -2,6 +2,16 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
+  // ======== FIX CORS ========
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  // ==========================
+
   try {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });
@@ -12,32 +22,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "URL tidak diberikan" });
     }
 
-    // ======== AMBIL HTML ========
     const response = await axios.get(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "text/html",
-      },
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
 
     const $ = cheerio.load(response.data);
 
-    // ======== AMBIL JUDUL ========
     const title =
       $("h1").text().trim() ||
       $('meta[property="og:title"]').attr("content") ||
       "Judul tidak ditemukan";
 
-    // ======== AMBIL SUMMARY / CAPTION ========
     const summary =
-      $(".single-body-text")
-        .text()
-        .replace(/\s+/g, " ")
-        .trim() ||
+      $(".single-body-text").text().replace(/\s+/g, " ").trim() ||
       $('meta[name="description"]').attr("content") ||
       "Summary tidak ditemukan.";
 
-    // ======== AMBIL GAMBAR ========
     let image =
       $('meta[property="og:image"]').attr("content") ||
       $("img").first().attr("src");
@@ -51,10 +51,7 @@ export default async function handler(req, res) {
 
     if (image) {
       try {
-        const imgResp = await axios.get(image, {
-          responseType: "arraybuffer",
-        });
-
+        const imgResp = await axios.get(image, { responseType: "arraybuffer" });
         const mime = imgResp.headers["content-type"] || "image/jpeg";
         const b64 = Buffer.from(imgResp.data).toString("base64");
         image_base64 = `data:${mime};base64,${b64}`;
@@ -68,6 +65,7 @@ export default async function handler(req, res) {
       summary,
       image_base64,
     });
+
   } catch (err) {
     console.error("Backend error:", err);
     return res.status(500).json({

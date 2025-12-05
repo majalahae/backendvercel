@@ -1,90 +1,111 @@
 import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
-const bufferToBase64 = (buffer) => Buffer.from(buffer).toString("base64");
-
-// Daftar origin yang diizinkan
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",  // untuk testing lokal
-  "https://rrinfg.xyz"      // domain live
-];
-
 export default async function handler(req, res) {
-  const origin = req.headers.origin;
+  res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  // --- SET CORS HEADER DINAMIS ---
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  // --- TANGANI PRE-FLIGHT OPTIONS ---
-  if (req.method === "OPTIONS") return res.status(204).end();
-
-  if (req.method !== "POST") {
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method Not Allowed" });
-  }
 
   try {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL kosong" });
 
-    // --- Fetch halaman berita ---
-    const newsResponse = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 Chrome/120" },
+    // Fetch HTML
+    const page = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+      redirect: "follow",
     });
 
-    if (!newsResponse.ok) return res.status(newsResponse.status).json({ error: `Gagal fetch URL: Status ${newsResponse.status}` });
-
-    const html = await newsResponse.text();
+    const html = await page.text();
     const $ = cheerio.load(html);
 
-    // Ambil judul
+    // --- TITLE ---
     const title =
       $('meta[property="og:title"]').attr("content") ||
-      $("h1.entry-title").text().trim() ||
-      $("h1.title").text().trim() ||
-      $("title").text().trim() ||
+      $("title").text() ||
       "Tanpa Judul";
 
-    // Ambil ringkasan
-    let paragraphs = [];
-    const contentArea = $("div.single-body-text, div.entry-content");
-    contentArea.find("p").each((i, el) => {
-      const tx = $(el).text().trim();
-      if (tx.length > 50 && !tx.includes("Baca Juga:")) paragraphs.push(tx);
+    // --- SUMMARY fallback lama ---
+    const fallbackSummary =
+      $('meta[property="og:description"]').attr("content") ||
+      $("p").first().text().slice(0, 150) ||
+      "Tidak ada ringkasan.";
+
+    // ======================================================
+    // 🔥 CAPTION BARU (2 PARAGRAF PERTAMA)
+    // ======================================================
+    const paragraphs = [];
+    $("p").each((i, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 40) paragraphs.push(text); // skip paragraf pendek/iklan
     });
-    const summary = paragraphs.slice(0, 2).join("\n\n") ||
-                    $('meta[property="og:description"]').attr("content") ||
-                    "Tidak ada ringkasan.";
 
-    // Ambil gambar
-    let imageUrl = $('meta[property="og:image"]').attr("content") ||
-                   contentArea.find("img").attr("src") ||
-                   null;
-    if (imageUrl) {
-      if (imageUrl.startsWith("//")) imageUrl = "https:" + imageUrl;
-      else if (imageUrl.startsWith("/")) imageUrl = new URL(url).origin + imageUrl;
-    }
+    const caption =
+      paragraphs.slice(0, 2).join("\n\n") || fallbackSummary;
 
-    let image_base64 = null;
-    if (imageUrl) {
-      try {
-        const imgResp = await fetch(imageUrl);
-        if (imgResp.ok) {
-          const buffer = await imgResp.arrayBuffer();
-          image_base64 = "data:image/jpeg;base64," + bufferToBase64(buffer);
+    // ======================================================
+
+    // --- IMAGE ---
+    let imageUrl = $('meta[property="og:image"]').attr("content");
+
+    if (!imageUrl) {
+      let maxArea = 0;
+      $("img").each((i, el) => {
+        const src = $(el).attr("src");
+        const w = parseInt($(el).attr("width")) || 0;
+        const h = parseInt($(el).attr("height")) || 0;
+        const area = w * h;
+
+        if (src && area > maxArea) {
+          maxArea = area;
+          imageUrl = src;
         }
-      } catch (err) {
-        console.error("Gagal ambil gambar:", err.message);
-      }
+      });
     }
 
-    return res.status(200).json({ title, summary, image_base64 });
+    if (imageUrl && imageUrl.startsWith("//")) {
+      imageUrl = `https:${imageUrl}`;
+    } else if (imageUrl && imageUrl.startsWith("/")) {
+      const base = new URL(url).origin;
+      imageUrl = base + imageUrl;
+    }
+
+    if (!imageUrl) {
+      return res.status(200).json({
+        title,
+        summary: caption, // <── ini caption 2 paragraf
+        image_base64: null,
+        warning: "Tidak ditemukan gambar apapun di halaman.",
+      });
+    }
+
+    // Fetch gambar
+    const imgResp = await fetch(imageUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+    });
+
+    const imgBuffer = await imgResp.arrayBuffer();
+    const imageBase64 =
+      "data:image/jpeg;base64," +
+      Buffer.from(imgBuffer).toString("base64");
+
+    return res.status(200).json({
+      title,
+      summary: caption, // <── frontend ambil ini
+      image_base64: imageBase64,
+    });
 
   } catch (err) {
-    console.error("Kesalahan umum:", err);
-    return res.status(500).json({ error: "Gagal memproses permintaan", details: err.message });
+    return res.status(500).json({ error: err.toString() });
   }
 }

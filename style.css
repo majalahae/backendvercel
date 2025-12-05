@@ -1,0 +1,38 @@
+body {
+  background: #fafafa;
+  font-family: "Albert Sans";
+  text-align: center;
+  padding: 20px;
+}
+
+.container {
+  max-width: 800px;
+  margin: auto;
+}
+
+input {
+  width: 70%;
+  padding: 8px;
+  margin: 10px 0;
+}
+
+button {
+  margin: 5px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+canvas {
+  border: 0.5px solid #ccc;
+  margin-top: 15px;
+  background: white;
+}
+
+.iridescence-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* jadi background */
+  overflow: hidden;
+}

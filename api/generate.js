@@ -1,6 +1,7 @@
 import cheerio from "cheerio";
 
 export default async function handler(req, res) {
+  // CORS agar rrinfg.xyz bisa akses API
   res.setHeader("Access-Control-Allow-Origin", "https://rrinfg.xyz");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -13,23 +14,22 @@ export default async function handler(req, res) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL kosong" });
 
-    // Native fetch bawaan Vercel
-    const page = await fetch(url, {
+    // -------- FETCH HTML --------
+    const response = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 Chrome/120" },
-      redirect: "follow",
     });
 
-    const html = await page.text();
+    const html = await response.text();
     const $ = cheerio.load(html);
 
-    // === TITLE ===
+    // -------- TITLE --------
     const title =
       $('meta[property="og:title"]').attr("content") ||
       $("h1.entry-title").text().trim() ||
       $("title").text().trim() ||
       "Tanpa Judul";
 
-    // === CAPTION ===
+    // -------- CAPTION --------
     let paragraphs = [];
 
     $("div.single-body-text p").each((i, el) => {
@@ -37,6 +37,7 @@ export default async function handler(req, res) {
       if (tx.length > 40) paragraphs.push(tx);
     });
 
+    // fallback
     if (paragraphs.length === 0) {
       $("p").each((i, el) => {
         const tx = $(el).text().trim();
@@ -49,14 +50,15 @@ export default async function handler(req, res) {
       $('meta[property="og:description"]').attr("content") ||
       "Tidak ada ringkasan.";
 
-    // === IMAGE ===
+    // -------- IMAGE / OG IMAGE --------
     let imageUrl = $('meta[property="og:image"]').attr("content");
 
     if (!imageUrl) {
-      const firstImg = $("div.single-body-text img").attr("src");
-      if (firstImg) imageUrl = firstImg;
+      const img = $("div.single-body-text img").attr("src");
+      if (img) imageUrl = img;
     }
 
+    // normalisasi URL
     if (imageUrl?.startsWith("//")) {
       imageUrl = "https:" + imageUrl;
     } else if (imageUrl?.startsWith("/")) {
@@ -64,24 +66,26 @@ export default async function handler(req, res) {
       imageUrl = base + imageUrl;
     }
 
+    // jika tidak ada gambar
     if (!imageUrl) {
       return res.status(200).json({
         title,
         summary: caption,
         image_base64: null,
-        warning: "Tidak ditemukan gambar di halaman.",
+        warning: "Tidak ada gambar.",
       });
     }
 
+    // -------- FETCH IMAGE BASE64 --------
     const imgResp = await fetch(imageUrl, {
       headers: { "User-Agent": "Mozilla/5.0 Chrome/120" },
     });
 
     const buffer = await imgResp.arrayBuffer();
     const imageBase64 =
-      `data:image/jpeg;base64,` +
-      Buffer.from(buffer).toString("base64");
+      "data:image/jpeg;base64," + Buffer.from(buffer).toString("base64");
 
+    // -------- RETURN KE FRONTEND --------
     return res.status(200).json({
       title,
       summary: caption,
